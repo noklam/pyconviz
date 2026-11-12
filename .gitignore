@@ -1,0 +1,17 @@
+.venv/
+.uv-cache/
+.npm-cache/
+__pycache__/
+*.pyc
+.pytest_cache/
+dist/
+build/
+*.egg-info/
+web/node_modules/
+web/dist/
+
+# Local AI / spec / screenshot working directories (not committed to repo)
+.claude/
+.cursor/
+openspec/
+screenshots/

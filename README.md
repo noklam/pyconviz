@@ -1,48 +1,84 @@
-# Python Concurrency Visualized (`pyconvis`)
+# pyconvis — Visualizing Concurrency & Parallelism in Python
 
-An interactive **3D Spacetime Visual Guide** for Python concurrency & parallelism—covering **`threading` with the GIL**, **Free-Threaded Python (`3.14t` No-GIL)**, and **`asyncio`**—inspired by Ivan Danilyuk's [*Visualizing Concurrency in Go*](https://divan.dev/posts/go_concurrency_visualize/).
+Interactive **3D WebGL Spacetime Visualizer & Real-Execution Tracer** for Python **`threading` (with GIL)**, **Free-Threaded Python (`3.13t` / `3.14t` No-GIL)**, and **`asyncio`**—inspired by Ivan Danilyuk's [*Visualizing Concurrency in Go*](https://divan.dev/posts/go_concurrency_visualize/).
 
-Every scene in the guide is a **real execution trace** of Python code, presented in plain English for anyone who knows Python basics.
+Every visualization is generated from **real execution traces** of Python code (never simulated animations).
 
----
-
-## Progressive 7-Lesson Story Arc
-
-### 1. Foundations — How to Read 3D Spacetime
-1. **How to Read Spacetime: `asyncio` vs `threading`** — Time flows downward (`0ms → end`), `main` branches out to start a helper, and a pink arrow passes `42` back through a Queue.
-2. **Waiting Over Time: The Timer Spiral** — 16 sequential timers carving a spiral staircase; introduces **3D View `[1]`**, **Top-Down `[2]`**, and **Side Time `[3]`**.
-3. **Fair Turn-Taking: 12-Player Ping-Pong Ring** — Why 12 workers sharing one Queue pass a counter in a neat FIFO circle instead of bouncing randomly.
-
-### 2. Python Threads & The GIL
-4. **Why Python Threads Don't Speed Up CPU Work (The GIL vs No-GIL `3.14t`)** — Side-by-side real trace of 4 threads doing pure-Python math with `PYTHON_GIL=1` (1 thread green at a time, 3 waiting in orange) vs `PYTHON_GIL=0` (all 4 cores glowing green in parallel, **~4× faster**).
-5. **When Python Threads DO Work: Waiting on I/O vs `asyncio`** — Why waiting on network/disk I/O drops the GIL so threads overlap waits—and how `asyncio` achieves the exact same speed on **1 single thread**.
-6. **Without the GIL: Shared Data Still Needs a `Lock`** — How `with lock:` protects shared lists in free-threaded Python while re-introducing single-file lock handoffs.
-
-### 3. Asyncio: Waiting vs Offloading
-7. **Blocking `asyncio`: Trap vs. Native `await` vs. `to_thread` Offload (3-Way Compare)** — Side-by-side comparison of:
-   - **1. Trap (`slow_task()`)**: Freezes the single-threaded event loop (`Blocking Asyncio Loop!`), stalling all 4 heartbeats.
-   - **2. Native Async (`await slow_async_task()`)**: OS watches the wait—**zero extra threads** needed.
-   - **3. Thread Offload (`await asyncio.to_thread(slow_task)`)**: Spawns a visible helper OS thread (`thread:slow_task`) to run legacy synchronous code without freezing the event loop.
+- **Read the interactive blog post:** [Visualizing Python Concurrency: Threads, the GIL, Free-Threaded 3.14t, and Asyncio](https://noklam.com/posts/visualizing-python-concurrency/)
 
 ---
 
-## Launch the Interactive Guide
+## Quick Start (Run Locally with Live Code Runner)
+
+Requires [uv](https://docs.astral.sh/uv/) (recommended so you can install free-threaded Python `3.14t` in one command).
 
 ```bash
-cd /Users/noklam.chan/nok/python-async
-.venv/bin/pyconvis serve --port 8765 --open
+# 1. Clone and install dependencies
+git clone https://github.com/noklam/pyconviz.git
+cd pyconviz
+uv sync
+
+# Optional (recommended): install free-threaded Python 3.14t for GIL=1 vs GIL=0 comparisons
+uv python install 3.14t
+
+# 2. Launch the interactive 3D Lab + "Run Live" Python playground
+uv run pyconvis serve --port 8765 --open
 ```
 
-## Developer & CLI Commands
+Opening `http://127.0.0.1:8765` gives you:
+- **Lesson Guide & Python Code tabs**: Walk through the 7 progressive visual lessons in 3D, Top-Down (`[2]`), and Side Time (`[3]`) views.
+- **Run Live tab** *(local server only)*: Edit any `asyncio` or `threading` Python snippet directly in the browser, choose **Auto**, **Compare `GIL=1` vs `GIL=0` (`3.14t`)**, **`PYTHON_GIL=1`**, or **`PYTHON_GIL=0`**, and click **Run in 3D** to trace and visualize your code immediately!
+
+---
+
+## Command-Line Usage (`pyconvis`)
+
+### 1. Trace any Python script (`asyncio` or `threading`)
+```bash
+# Run and open directly in the 3D visualizer
+uv run pyconvis trace examples/04_ping_pong_ring.py --layout ring --serve --open
+
+# Or export trace JSON to a file
+uv run pyconvis trace my_script.py -o trace.json
+```
+
+### 2. Side-by-Side `PYTHON_GIL=1` vs Free-Threaded `PYTHON_GIL=0` Comparison
+Runs your threaded Python script twice in isolated subprocesses on CPython `3.14t` (`PYTHON_GIL=1` vs `PYTHON_GIL=0`) and opens a synchronized Real-Time Scale comparison:
+```bash
+uv run pyconvis compare-gil examples/10_cpu_gil_vs_nogil.py --serve --open
+```
+
+### 3. Serve a saved `.json` trace
+```bash
+uv run pyconvis serve trace.json --port 8765 --open
+```
+
+---
+
+## Included 7-Lesson Progressive Guide
+
+1. **How to Read Spacetime (`asyncio` vs `Thread`)** — Time flows downward (`0ms → end`), `main` spawns a helper, and queue messages fly across in 3D.
+2. **Waiting Over Time (Timer Spiral)** — 16 sequential timers demonstrating **3D `[1]`**, **Top-Down `[2]`**, and **Side Time `[3]`** camera projections.
+3. **Fair Turn-Taking (12-Player Ping-Pong Ring)** — Why 12 workers sharing one Queue pass messages in a deterministic FIFO circle.
+4. **Why Python Threads Don't Speed Up CPU Work (The GIL vs `3.14t` No-GIL)** — Side-by-side real trace showing 1-thread GIL turn-taking vs 4-core parallel execution (**~4× faster**).
+5. **When Python Threads DO Work (Waiting on I/O vs `asyncio`)** — Why I/O drops the GIL, and how `asyncio` overlaps 10 slow waits on **1 single thread**.
+6. **Without the GIL: Shared Data Still Needs a `Lock`** — Parallel CPU execution vs single-file `with lock:` critical sections and lock handoff arrows.
+7. **Blocking `asyncio`: Trap vs. Native `await` vs. `to_thread` Offload (3-Way Compare)** — Comparing a blocking `slow_task()` (freezes the loop), native `await slow_async_task()` (`0` extra threads), and `await asyncio.to_thread(slow_task)` (`+1` helper OS thread).
+
+---
+
+## Rebuilding Web Assets & Running Tests
 
 ```bash
-# Regenerate all 7 real curriculum traces
-.venv/bin/pyconvis build-examples
+# Run Python tracer & CLI test suite
+uv run --extra dev pytest -v
 
-# Rebuild static frontend bundle
-cd web && npm run build && cp -R dist/. ../src/pyconvis/static/
+# Regenerate the 7 built-in real execution traces
+uv run pyconvis build-examples
 
-# Run test suite & OpenSpec strict validation
-.venv/bin/pytest -v
-openspec validate --all --strict
+# Rebuild frontend bundle (local repo mode with Run Live tab)
+cd web
+npm install
+npm run build
+cp -R dist/. ../src/pyconvis/static/
 ```

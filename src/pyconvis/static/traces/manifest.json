@@ -1,0 +1,329 @@
+{
+  "version": "2.0",
+  "lesson_count": 7,
+  "lessons": [
+    {
+      "id": "hello-world",
+      "number": "01",
+      "title": "How to Read Spacetime: Asyncio vs Thread",
+      "track": "1. Foundations",
+      "badge": "Start Here",
+      "kind": "comparison",
+      "trace_file": "01_hello_world.json",
+      "default_camera": "perspective",
+      "layout_hint": "radial",
+      "summary": "Time flows top-to-bottom. Watch `main` start one helper worker, wait for a message (`42`), and wrap up\u2014in `asyncio` vs `threading`.",
+      "concept_markdown": "Think of each vertical pillar as a **worker's timeline** flowing **downward** from `0ms` at the top.\n\n- **Center (`main`)**: Your main Python program.\n- **Blue horizontal bridge**: `main` starts a helper (`sender #1`), and reconnects at the bottom when it finishes.\n- **Pink arrow (`42`)**: `sender #1` puts the number `42` into a shared Queue so `main` can read it.\n\nBoth panes do the exact same job: **Left** uses a lightweight `asyncio` Task (all on 1 OS thread), while **Right** asks the operating system for a separate `Thread`.",
+      "what_to_notice": [
+        "Read from top (`0ms`) downward: `main` branches out to start `sender #1`.",
+        "While `sender #1` waits in blue (`Waiting on I/O`), `main` waits in purple (`Waiting for Queue`).",
+        "When `42` shoots back to `main`, both finish cleanly."
+      ],
+      "legend_keys": [
+        "waiting_io",
+        "waiting_sync",
+        "queue_message"
+      ],
+      "takeaways": [
+        {
+          "label": "Completion Time",
+          "value": "42 ms vs 50 ms",
+          "note": "Both pause briefly, pass 42 through a Queue, and rejoin main.",
+          "tone": "sky"
+        },
+        {
+          "label": "OS Threads Created",
+          "value": "1 Thread vs 2 Threads",
+          "note": "asyncio switches tasks inside 1 thread; threading spawns an OS thread."
+        }
+      ],
+      "code_files": [
+        {
+          "filename": "01_hello_asyncio.py",
+          "label": "asyncio (1 Thread)",
+          "code": "\"\"\"01. Hello, Concurrent World (asyncio)\n\nPython's asyncio counterpart to divan's first Go concurrency example:\none Queue (channel), one spawned Task, one send, and one receive.\n\"\"\"\n\nimport asyncio\n\n\nasync def sender(ch: asyncio.Queue[int]) -> None:\n    await asyncio.sleep(0.025)\n    await ch.put(42)\n    await asyncio.sleep(0.015)\n\n\nasync def main() -> None:\n    ch: asyncio.Queue[int] = asyncio.Queue(maxsize=1)\n    task = asyncio.create_task(sender(ch))\n    value = await ch.get()\n    await task\n    assert value == 42\n\n\nif __name__ == \"__main__\":\n    asyncio.run(main())\n"
+        },
+        {
+          "filename": "01b_hello_threading.py",
+          "label": "threading (OS Thread)",
+          "code": "\"\"\"01b. Hello, Concurrent World (threading)\n\nSame single-message handoff implemented with an OS Thread and queue.Queue.\n\"\"\"\n\nimport queue\nimport threading\nimport time\n\n\ndef sender(ch: queue.Queue[int]) -> None:\n    time.sleep(0.025)\n    ch.put(42)\n    time.sleep(0.015)\n\n\ndef main() -> None:\n    ch: queue.Queue[int] = queue.Queue(maxsize=1)\n    t = threading.Thread(target=sender, args=(ch,))\n    t.start()\n    value = ch.get()\n    t.join()\n    assert value == 42\n\n\nif __name__ == \"__main__\":\n    main()\n"
+        }
+      ]
+    },
+    {
+      "id": "recurrent-timers",
+      "number": "02",
+      "title": "Waiting Over Time: The Timer Spiral",
+      "track": "1. Foundations",
+      "badge": "3D vs Top-Down",
+      "kind": "single",
+      "trace_file": "02_recurrent_timers.json",
+      "default_camera": "perspective",
+      "layout_hint": "radial",
+      "summary": "Sixteen small timer tasks run one after another around `main`, carving a spiral staircase down through time.",
+      "concept_markdown": "Before comparing threads and `asyncio`, practice using the **three camera views** (`1`, `2`, `3` in the top bar) on this simple spiral!\n\nHere `main` starts a short timer task, waits for its `1` signal, and repeats 16 times. Because each timer starts *after* the previous one finishes, they step downward like a **spiral staircase**.",
+      "what_to_notice": [
+        "**3D View `[1]`**: Drag to rotate and see the staircase step downward one timer at a time.",
+        "**Top-Down `[2]`**: Collapses time so you see *who talks to whom*\u201416 timers arranged like a clock sending `1` to `main`.",
+        "**Side Time `[3]`**: Flattens depth into a clean top-to-bottom timeline."
+      ],
+      "legend_keys": [
+        "waiting_io",
+        "waiting_sync",
+        "queue_message"
+      ],
+      "takeaways": [
+        {
+          "label": "Total Time (16 Sequential Timers)",
+          "value": "205 ms",
+          "note": "Timers run one after another, so their wait times add up vertically.",
+          "tone": "sky"
+        },
+        {
+          "label": "Messages Passed to main",
+          "value": "16 ticks",
+          "note": "Switch between 3D [1], Top-Down [2], and Side [3] to compare views."
+        }
+      ],
+      "code_files": [
+        {
+          "filename": "02_timers_asyncio.py",
+          "label": "02_timers_asyncio.py",
+          "code": "\"\"\"02. Recurrent Timers (asyncio)\n\nBuilds a channel-style timer helper that spawns a short-lived task, sleeps,\nand emits a tick on its own Queue. Running 16 timers sequentially forms a\n3D spiral staircase around `main`.\n\"\"\"\n\nimport asyncio\n\n\ndef timer(delay: float) -> asyncio.Queue[int]:\n    ch: asyncio.Queue[int] = asyncio.Queue(maxsize=1)\n\n    async def tick() -> None:\n        await asyncio.sleep(delay)\n        await ch.put(1)\n\n    asyncio.create_task(tick())\n    return ch\n\n\nasync def main() -> None:\n    for _ in range(16):\n        ch = timer(0.012)\n        await ch.get()\n\n\nif __name__ == \"__main__\":\n    asyncio.run(main())\n"
+        }
+      ]
+    },
+    {
+      "id": "ping-pong-ring",
+      "number": "03",
+      "title": "Fair Turn-Taking: 12-Player Ping-Pong Ring",
+      "track": "1. Foundations",
+      "badge": "Queue Order",
+      "kind": "single",
+      "trace_file": "03_ping_pong_ring.json",
+      "default_camera": "top",
+      "layout_hint": "ring",
+      "summary": "Twelve tasks all listen on the same Queue\u2014yet the ball passes around a neat circle instead of bouncing randomly!",
+      "concept_markdown": "If 12 workers all wait on the **same Queue** (`await table.get()`), why doesn't the counter jump around chaotically?\n\nBecause Python's Queue keeps waiting workers in a **First-In, First-Out (FIFO) line**\u2014just like a ticket counter. As soon as `player #1` passes the ball, it goes to the back of the line, creating a fair 12-player ring!",
+      "what_to_notice": [
+        "In **Top-Down `[2]`**, watch the pink arrows trace a clean 12-sided circle.",
+        "Click **3D View `[1]`** to see that circle stretch downward into a corkscrew over 24 passes!"
+      ],
+      "legend_keys": [
+        "waiting_io",
+        "waiting_sync",
+        "queue_message"
+      ],
+      "takeaways": [
+        {
+          "label": "Workers Sharing 1 Queue",
+          "value": "12 tasks",
+          "note": "Python's Queue wakes waiting tasks in fair First-In, First-Out order.",
+          "tone": "sky"
+        },
+        {
+          "label": "Total Passes Around Ring",
+          "value": "35 passes",
+          "note": "Switch to 3D View [1] to see the circle wind downward like a spring!"
+        }
+      ],
+      "code_files": [
+        {
+          "filename": "04_ping_pong_ring.py",
+          "label": "04_ping_pong_ring.py",
+          "code": "\"\"\"04. Ping-Pong Ring (12 Players \u2014 FIFO Queue Order)\n\nTwelve player tasks wait on the same asyncio.Queue. Because asyncio.Queue wakes\nwaiting getters in strict FIFO deque order, the ball travels around the ring\nin deterministic sequential order! Switch to Top-Down View to see the polygon.\n\"\"\"\n\nimport asyncio\n\nPLAYERS = 12\nRALLIES = 24\n\n\nasync def player(idx: int, table: asyncio.Queue[int]) -> None:\n    while True:\n        ball = await table.get()\n        if ball < 0:\n            # Pass stop token to next player in FIFO order\n            await table.put(-1)\n            return\n        ball += 1\n        await asyncio.sleep(0.008)\n        if ball >= RALLIES:\n            await table.put(-1)\n            return\n        await table.put(ball)\n\n\nasync def main() -> None:\n    table: asyncio.Queue[int] = asyncio.Queue()\n    tasks = []\n    for i in range(1, PLAYERS + 1):\n        t = asyncio.create_task(player(i, table), name=f\"player #{i}\")\n        tasks.append(t)\n        # Let each task register in the Queue's FIFO waiter deque in order\n        await asyncio.sleep(0.001)\n\n    await table.put(0)\n    await asyncio.gather(*tasks)\n\n\nif __name__ == \"__main__\":\n    asyncio.run(main())\n"
+        }
+      ]
+    },
+    {
+      "id": "gil-vs-freethreaded",
+      "number": "04",
+      "title": "Why Python Threads Don't Speed Up CPU Work (The GIL)",
+      "track": "2. Python Threads & The GIL",
+      "badge": "GIL vs No-GIL",
+      "kind": "comparison",
+      "trace_file": "04_cpu_gil_vs_nogil.json",
+      "default_camera": "side",
+      "layout_hint": "radial",
+      "summary": "The big surprise in Python: 4 threads doing pure-Python math take turns one by one under the GIL\u2014until Free-Threaded Python turns the GIL off!",
+      "concept_markdown": "In most languages, starting 4 threads on a 4-core laptop runs math 4\u00d7 faster. **Why didn't standard Python?**\n\nTo keep memory bookkeeping simple, standard Python uses a **Global Interpreter Lock (GIL)**\u2014imagine **4 workers sharing 1 microphone**:\n\n- **Left (Standard Python \u2014 GIL ON)**: Only **1 thread** can run Python code (green) at any instant! Every ~2ms Python passes the microphone, leaving the other 3 threads stuck in **orange (`Waiting for GIL`)**.\n- **Right (Free-Threaded Python 3.14t \u2014 GIL OFF)**: Python's new free-threaded mode removes the GIL. All **4 threads glow solid green at the same time** on 4 CPU cores\u2014finishing in nearly a quarter of the time!",
+      "what_to_notice": [
+        "Scan horizontally across the **Left** view: at any height, **only ONE worker is green** while the other 3 are orange!",
+        "Look at the **Right** view (`GIL OFF`): all 4 workers burn bright green side-by-side and finish way higher up on the millisecond ruler."
+      ],
+      "legend_keys": [
+        "running_cpu",
+        "waiting_gil",
+        "queue_message"
+      ],
+      "takeaways": [
+        {
+          "label": "4-Thread CPU Finish Time",
+          "value": "337 ms \u2192 113 ms (2.98x faster)",
+          "note": "Removing the GIL lets all 4 CPU cores run Python code simultaneously.",
+          "tone": "emerald"
+        },
+        {
+          "label": "Time Spent Waiting on GIL",
+          "value": "61% \u2192 0%",
+          "note": "With GIL ON, 3 out of 4 threads sit stalled in orange at any moment.",
+          "tone": "amber"
+        }
+      ],
+      "code_files": [
+        {
+          "filename": "10_cpu_gil_vs_nogil.py",
+          "label": "10_cpu_gil_vs_nogil.py",
+          "code": "\"\"\"10. CPU-Bound Worker Threads: GIL (PYTHON_GIL=1) vs Free-Threaded (PYTHON_GIL=0)\n\nFour OS threads execute pure-Python integer hashing/math and post digests to\n`main`. Under PYTHON_GIL=1, threads take turns holding the GIL while siblings\nstall in `waiting_gil`. Under PYTHON_GIL=0 (Python 3.14t), all 4 cores execute\nPython bytecode simultaneously in true parallel!\n\"\"\"\n\nimport queue\nimport threading\n\nWORKERS = 4\n\n\ndef cpu_worker(wid: int, results: queue.Queue[str]) -> None:\n    acc = wid & 0xFF\n    for step in range(950):\n        s_mask = step & 0xFF\n        for j in range(3200):\n            acc = (acc ^ (j & 0xFF) ^ s_mask) & 0xFF\n        if step == 474 or step == 949:\n            results.put(f\"w{wid}:{acc:02x}\")\n\n\ndef main() -> None:\n    results: queue.Queue[str] = queue.Queue()\n    threads = [\n        threading.Thread(target=cpu_worker, args=(i, results), name=f\"cpu_worker #{i}\")\n        for i in range(1, WORKERS + 1)\n    ]\n    for t in threads:\n        t.start()\n\n    for _ in range(WORKERS * 2):\n        results.get()\n\n    for t in threads:\n        t.join()\n\n\nif __name__ == \"__main__\":\n    main()\n"
+        }
+      ]
+    },
+    {
+      "id": "io-threads-vs-asyncio",
+      "number": "05",
+      "title": "When Python Threads DO Work: Waiting on I/O vs Asyncio",
+      "track": "2. Python Threads & The GIL",
+      "badge": "Threads vs Async",
+      "kind": "comparison",
+      "trace_file": "05_io_threads_vs_asyncio.json",
+      "default_camera": "side",
+      "layout_hint": "radial",
+      "summary": "If standard Python has a GIL, why do threads still speed up web requests? Because waiting on network or disk drops the GIL!",
+      "concept_markdown": "If the GIL only lets 1 thread run Python code at a time, why have Python developers used `threading` for web APIs and downloads for years?\n\nBecause **waiting on external I/O** (network responses, database queries, disk reads) **drops the GIL microphone**!\n\n- **Left (`threading` with GIL ON)**: All 10 threads send their request, drop the GIL, and wait in blue **at the same time**.\n- **Right (`asyncio`)**: Gets the **exact same speedup on just 1 OS thread**! Instead of creating 10 heavy OS threads, 1 thread juggles all 10 waits with `await`\u2014which is why `asyncio` easily scales to 10,000+ connections.",
+      "what_to_notice": [
+        "Both 10-worker runs finish at almost the **same height (~75 ms)** instead of `10 \u00d7 55 ms = 550 ms`!",
+        "`threading` needed **10 extra OS threads**, while `asyncio` did the exact same waiting on **1 thread**."
+      ],
+      "legend_keys": [
+        "waiting_io",
+        "running_cpu",
+        "queue_message"
+      ],
+      "takeaways": [
+        {
+          "label": "10 Slow I/O Calls (~55ms each)",
+          "value": "81 ms vs 70 ms",
+          "note": "Instead of 550 ms sequentially, both overlap all 10 waits!",
+          "tone": "emerald"
+        },
+        {
+          "label": "Why Both Work",
+          "value": "10 Threads vs 1 Thread",
+          "note": "Waiting on I/O releases the GIL\u2014while asyncio needs only 1 thread.",
+          "tone": "sky"
+        }
+      ],
+      "code_files": [
+        {
+          "filename": "11a_io_threading.py",
+          "label": "threading (10 Threads)",
+          "code": "\"\"\"05a. Waiting on I/O with GIL Threading\n\nEven with the GIL enabled, waiting on network or disk I/O releases the GIL!\nTen threads overlap their `slow_io_task()` waits concurrently.\n\"\"\"\n\nimport queue\nimport threading\nimport time\n\nWORKERS = 10\n\n\ndef slow_io_task(idx: int) -> str:\n    \"\"\"Simulates waiting on a slow network/database response (releases GIL).\"\"\"\n    time.sleep(0.045 + (idx % 3) * 0.012)\n    return f\"ok#{idx}\"\n\n\ndef worker(idx: int, out: queue.Queue[str]) -> None:\n    acc = sum(i * i for i in range(1500))\n    status = slow_io_task(idx)\n    out.put(f\"{status}:{acc % 97}\")\n\n\ndef main() -> None:\n    out: queue.Queue[str] = queue.Queue()\n    threads = [\n        threading.Thread(target=worker, args=(i, out), name=f\"io_thread #{i}\")\n        for i in range(1, WORKERS + 1)\n    ]\n    for t in threads:\n        t.start()\n    for _ in range(WORKERS):\n        out.get()\n    for t in threads:\n        t.join()\n\n\nif __name__ == \"__main__\":\n    main()\n"
+        },
+        {
+          "filename": "11b_io_asyncio.py",
+          "label": "asyncio (1 Thread)",
+          "code": "\"\"\"05b. Waiting on I/O with Single-Threaded Asyncio\n\nAchieves the exact same overlapping I/O speed as 10 OS threads, but all on\n1 single thread using `await slow_async_io_task()`.\n\"\"\"\n\nimport asyncio\n\nWORKERS = 10\n\n\nasync def slow_async_io_task(idx: int) -> str:\n    \"\"\"Non-blocking async I/O wait: pauses cleanly on the single event loop.\"\"\"\n    await asyncio.sleep(0.045 + (idx % 3) * 0.012)\n    return f\"ok#{idx}\"\n\n\nasync def worker(idx: int, out: asyncio.Queue[str]) -> None:\n    acc = sum(i * i for i in range(1500))\n    status = await slow_async_io_task(idx)\n    await out.put(f\"{status}:{acc % 97}\")\n\n\nasync def main() -> None:\n    out: asyncio.Queue[str] = asyncio.Queue()\n    tasks = [\n        asyncio.create_task(worker(i, out), name=f\"io_task #{i}\")\n        for i in range(1, WORKERS + 1)\n    ]\n    for _ in range(WORKERS):\n        await out.get()\n    await asyncio.gather(*tasks)\n\n\nif __name__ == \"__main__\":\n    asyncio.run(main())\n"
+        }
+      ]
+    },
+    {
+      "id": "freethreaded-lock-contention",
+      "number": "06",
+      "title": "Without the GIL: Shared Data Still Needs a Lock",
+      "track": "2. Python Threads & The GIL",
+      "badge": "No-GIL + Lock",
+      "kind": "single",
+      "trace_file": "06_freethreaded_lock.json",
+      "default_camera": "perspective",
+      "layout_hint": "radial",
+      "summary": "Turning off the GIL unlocks multi-core speed\u2014but if threads update a shared list under a `Lock`, they line up single-file again!",
+      "concept_markdown": "Free-threaded Python (`GIL OFF`) lets all 4 workers run math in parallel\u2014**until they touch shared data**.\n\nTo safely update a shared `ledger` list without corrupting it, workers wrap that section in `with ledger_lock:`. Notice what happens: workers run **green in parallel** during private math, then hit a traffic jam in **purple (`Waiting for Lock`)** as yellow arrows pass the lock one by one!",
+      "what_to_notice": [
+        "At the top of each round, all 4 pillars are **green simultaneously** (parallel CPU!).",
+        "As soon as they enter `with ledger_lock:`, 3 workers turn **purple** and wait for the yellow **Lock Handoff** arrow.",
+        "Rule of thumb: do heavy work *outside* `with lock:`, and keep locked sections tiny."
+      ],
+      "legend_keys": [
+        "running_cpu",
+        "waiting_sync",
+        "lock_handoff"
+      ],
+      "takeaways": [
+        {
+          "label": "Parallel CPU Utilization",
+          "value": "3.2x cores",
+          "note": "4 threads run math in parallel, but queue single-file inside `with lock:`.",
+          "tone": "emerald"
+        },
+        {
+          "label": "Sequential Lock Handoffs",
+          "value": "6 passes",
+          "note": "Keep locked critical sections short so threads don't wait in purple!",
+          "tone": "amber"
+        }
+      ],
+      "code_files": [
+        {
+          "filename": "12_freethreaded_lock_contention.py",
+          "label": "12_freethreaded_lock_contention.py",
+          "code": "\"\"\"12. Free-Threaded Lock Contention (PYTHON_GIL=0 + threading.Lock)\n\nRemoving the GIL unlocks multi-core Python, but shared mutable state still\nrequires synchronization! Here 4 free-threaded workers run parallel CPU bursts\nand then contend on `ledger_lock`, revealing Amdahl's Law & lock handoff arrows.\n\"\"\"\n\nimport queue\nimport threading\n\nWORKERS = 4\n\n\ndef account_worker(\n    wid: int, ledger_lock: threading.Lock, ledger: list[int], done_q: queue.Queue[str]\n) -> None:\n    for step in range(3):\n        # Parallel lock-free local computation on separate CPU cores\n        acc = 0\n        for i in range(240):\n            im = i & 0xFF\n            for j in range(1800):\n                acc = (acc ^ (j & 0xFF) ^ im ^ wid) & 0xFF\n\n        # Serialized critical section protected by explicit Lock\n        with ledger_lock:\n            crit = 0\n            for j in range(180_000):\n                crit = (crit ^ (j & 0xFF)) & 0xFF\n            ledger.append(acc ^ crit)\n\n    done_q.put(f\"w{wid}:ok\")\n\n\ndef main() -> None:\n    ledger_lock = threading.Lock()\n    ledger: list[int] = []\n    done_q: queue.Queue[str] = queue.Queue()\n\n    threads = [\n        threading.Thread(\n            target=account_worker,\n            args=(i, ledger_lock, ledger, done_q),\n            name=f\"worker #{i}\",\n        )\n        for i in range(1, WORKERS + 1)\n    ]\n    for t in threads:\n        t.start()\n    for _ in range(WORKERS):\n        done_q.get()\n    for t in threads:\n        t.join()\n    assert len(ledger) == WORKERS * 3\n\n\nif __name__ == \"__main__\":\n    main()\n"
+        }
+      ]
+    },
+    {
+      "id": "blocking-vs-async-vs-offload",
+      "number": "07",
+      "title": "Blocking Asyncio: Trap vs. Native Async vs. Offload",
+      "track": "3. Asyncio: Waiting vs Offloading",
+      "badge": "3-Way Compare",
+      "kind": "comparison",
+      "trace_file": "07_blocking_3way.json",
+      "default_camera": "side",
+      "layout_hint": "radial",
+      "summary": "Compare all 3 ways of handling a `slow_task` alongside 4 live heartbeats: blocking the loop, native `await`, and `asyncio.to_thread`!",
+      "concept_markdown": "Because `asyncio` runs every task on **1 single thread**, a task only lets others run when it hits `await`. What happens when `request_task` needs to run a slow operation alongside 4 `heartbeat` tasks?\n\n- **1. Trap (`slow_task()`)**: Calls a normal synchronous function directly. Without `await`, Python's single thread is hijacked (**thick red bar**)\u2014all 4 heartbeats **freeze completely**!\n- **2. Native Async (`await slow_async_task()`)**: Uses an async-native library (timers, async HTTP/DB). The OS watches the wait outside Python\u2014**0 extra threads** are created, and heartbeats never miss a beat!\n- **3. Thread Offload (`await asyncio.to_thread(slow_task)`)**: When a library has **no `async` version** (legacy sync code, file I/O, heavy work), `to_thread()` delegates `slow_task` to a **real background helper thread** (gold `thread:slow_task` node) so the event loop stays free!",
+      "what_to_notice": [
+        "**Left (Trap)**: During the thick red **`Blocking Asyncio Loop!`** bar, **zero** pink heartbeat arrows fire anywhere!",
+        "**Middle (Native Async)**: Best choice when supported\u2014heartbeats keep firing smoothly with **zero extra threads**.",
+        "**Right (`to_thread` Offload)**: Spot the **gold `thread:slow_task` branch**! It runs the synchronous `slow_task` on a separate OS thread and sends a green result arrow back when done."
+      ],
+      "legend_keys": [
+        "blocking_loop",
+        "waiting_io",
+        "queue_message",
+        "task_result"
+      ],
+      "takeaways": [
+        {
+          "label": "Time Asyncio Loop Was Frozen",
+          "value": "70 ms \u2192 0 ms \u2192 0 ms",
+          "note": "Direct `slow_task()` freezes every heartbeat; `await` & `to_thread` never freeze!",
+          "tone": "crimson"
+        },
+        {
+          "label": "Native Async vs to_thread()",
+          "value": "86 ms (1 thread) vs 90 ms (+helper thread)",
+          "note": "Prefer native `await` when available; use `to_thread()` to wrap sync functions.",
+          "tone": "emerald"
+        }
+      ],
+      "code_files": [
+        {
+          "filename": "13a_blocking_bad.py",
+          "label": "1. Trap: slow_task()",
+          "code": "\"\"\"View 1 (TRAP): Calling blocking `slow_task()` directly inside `async def`\n\nBecause `slow_task()` never pauses with `await`, it hijacks Python's single\nevent-loop thread and freezes all 4 concurrent `heartbeat` tasks!\n\"\"\"\n\nimport asyncio\nimport time\n\n\ndef slow_task() -> str:\n    \"\"\"A synchronous blocking call (e.g. legacy HTTP client or file read).\"\"\"\n    time.sleep(0.065)\n    return \"done\"\n\n\nasync def heartbeat(idx: int, ticks: asyncio.Queue[str]) -> None:\n    for step in range(1, 5):\n        await asyncio.sleep(0.018)\n        await ticks.put(f\"hb{idx}.{step}\")\n\n\nasync def handle_request(ticks: asyncio.Queue[str]) -> None:\n    await asyncio.sleep(0.020)\n    # TRAP: Blocks the single asyncio thread until `slow_task()` finishes!\n    result = slow_task()\n    await ticks.put(result)\n\n\nasync def main() -> None:\n    ticks: asyncio.Queue[str] = asyncio.Queue()\n    tasks = [\n        asyncio.create_task(heartbeat(i, ticks), name=f\"heartbeat #{i}\")\n        for i in range(1, 5)\n    ]\n    tasks.append(asyncio.create_task(handle_request(ticks), name=\"request_task\"))\n\n    for _ in range(4 * 4 + 1):\n        await ticks.get()\n    await asyncio.gather(*tasks)\n\n\nif __name__ == \"__main__\":\n    asyncio.run(main())\n"
+        },
+        {
+          "filename": "13b_native_async.py",
+          "label": "2. Native: await slow_async_task()",
+          "code": "\"\"\"View 2 (NATIVE ASYNC): Awaiting non-blocking `slow_async_task()`\n\nWhen an async-native API exists (timers, sockets, async HTTP/DB), the OS tracks\nthe wait outside Python \u2014 ZERO extra threads are created!\n\"\"\"\n\nimport asyncio\n\n\nasync def slow_async_task() -> str:\n    \"\"\"Non-blocking async wait: yields control immediately on the same thread.\"\"\"\n    await asyncio.sleep(0.065)\n    return \"done\"\n\n\nasync def heartbeat(idx: int, ticks: asyncio.Queue[str]) -> None:\n    for step in range(1, 5):\n        await asyncio.sleep(0.018)\n        await ticks.put(f\"hb{idx}.{step}\")\n\n\nasync def handle_request(ticks: asyncio.Queue[str]) -> None:\n    await asyncio.sleep(0.020)\n    # NATIVE ASYNC: Pauses cleanly on 1 thread while heartbeats keep ticking\n    result = await slow_async_task()\n    await ticks.put(result)\n\n\nasync def main() -> None:\n    ticks: asyncio.Queue[str] = asyncio.Queue()\n    tasks = [\n        asyncio.create_task(heartbeat(i, ticks), name=f\"heartbeat #{i}\")\n        for i in range(1, 5)\n    ]\n    tasks.append(asyncio.create_task(handle_request(ticks), name=\"request_task\"))\n\n    for _ in range(4 * 4 + 1):\n        await ticks.get()\n    await asyncio.gather(*tasks)\n\n\nif __name__ == \"__main__\":\n    asyncio.run(main())\n"
+        },
+        {
+          "filename": "13c_offload_to_thread.py",
+          "label": "3. Offload: to_thread(slow_task)",
+          "code": "\"\"\"View 3 (THREAD OFFLOAD): `await asyncio.to_thread(slow_task)`\n\nWhen you must call a synchronous `slow_task()` that has no `async` version,\n`to_thread()` hands it to a background worker thread so the loop stays free!\n\"\"\"\n\nimport asyncio\nimport time\n\n\ndef slow_task() -> str:\n    \"\"\"Exact same synchronous blocking function from View 1!\"\"\"\n    time.sleep(0.065)\n    return \"done\"\n\n\nasync def heartbeat(idx: int, ticks: asyncio.Queue[str]) -> None:\n    for step in range(1, 5):\n        await asyncio.sleep(0.018)\n        await ticks.put(f\"hb{idx}.{step}\")\n\n\nasync def handle_request(ticks: asyncio.Queue[str]) -> None:\n    await asyncio.sleep(0.020)\n    # OFFLOAD: Spawns helper `thread:slow_task` off the main event loop!\n    result = await asyncio.to_thread(slow_task)\n    await ticks.put(result)\n\n\nasync def main() -> None:\n    ticks: asyncio.Queue[str] = asyncio.Queue()\n    tasks = [\n        asyncio.create_task(heartbeat(i, ticks), name=f\"heartbeat #{i}\")\n        for i in range(1, 5)\n    ]\n    tasks.append(asyncio.create_task(handle_request(ticks), name=\"request_task\"))\n\n    for _ in range(4 * 4 + 1):\n        await ticks.get()\n    await asyncio.gather(*tasks)\n\n\nif __name__ == \"__main__\":\n    asyncio.run(main())\n"
+        }
+      ]
+    }
+  ]
+}
